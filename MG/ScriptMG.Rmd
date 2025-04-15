@@ -1,0 +1,185 @@
+---
+title: "script_RILI"
+output: html_document
+date: "2025-04-11"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+
+```{r cars}
+summary(cars)
+```
+
+## Including Plots
+
+You can also embed plots, for example:
+
+```{r pressure, echo=FALSE}
+plot(pressure)
+```
+
+Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
+
+```{r}
+library(Seurat)
+library(clustree)
+library(cluster)
+library(ggplot2)
+library(dplyr)
+```
+```{r}
+count_matrix <- read.delim("counts_UMI.csv", row.names = 1, check.names = FALSE)
+```
+create metadata from data provided in the article
+```{r}
+# Получаем имена колонок
+col_names <- colnames(count_matrix)
+
+# Обрезаем имена до первого символа "_"
+short_names <- sub("_.*", "", col_names)
+
+metadata <- data.frame(row.names = col_names, shortened = short_names)
+
+# Добавим колонку cell_line
+metadata$mouse_line <- ifelse(metadata$shortened %in% c("sfei2", "s2"),
+                               "C57BL/6N",
+                               ifelse(metadata$shortened %in% c("s3", "s4"),
+                                      "C3H/HeN", NA))
+
+# Добавим колонку EC
+metadata$EC <- ifelse(metadata$shortened %in% c("sfei2", "s3"),
+                        "control",
+                        ifelse(metadata$shortened %in% c("s2", "s4"),
+                               "experiment", NA))
+
+# Удалим колонку shortened
+metadata$shortened <- NULL
+
+write.csv(metadata, "metadata.csv")
+```
+
+```{r}
+metadata <- read.csv("metadata.csv")
+```
+
+```{r}
+# Create a Seurat object
+seurat_object <- CreateSeuratObject(counts = count_matrix, meta.data = metadata, min.cells = 3, min.features = 200)
+```
+```{r}
+#data cleaning - mtRNA
+seurat_object[["percent.mt"]] <- PercentageFeatureSet(seurat_object, pattern = "^MT-")
+
+clean_plot <- VlnPlot(seurat_object, features = c("nFeature_RNA", "nCount_RNA",'percent.mt'), ncol = 3)
+clean_plot
+
+#according to this plot, we see that all the cells have percent.mt < 5 (or mt genes are not presentedd in the data table)
+
+# FeatureScatter is typically used to visualize feature-feature relationships, but can be used for anything calculated by the object, i.e. columns in object metadata, PC scores etc.
+FeatureScatter(seurat_object, feature1 = "nCount_RNA", feature2 = "nFeature_RNA")
+
+#according to this plot, we remove outlets
+seurat_object <- subset(seurat_object, subset = nFeature_RNA > 200 & nFeature_RNA < 6000 & percent.mt < 5)
+seurat_object <- subset(seurat_object, subset = nFeature_RNA > 200 & nFeature_RNA < 6000)
+```
+divide into two subsets according to mouse line
+```{r}
+seuratC57BL <- subset(seurat_object, subset = mouse_line == 'C57BL/6N')
+seuratC3H <- subset(seurat_object, subset = mouse_line == 'C3H/HeN')
+
+```
+#pipeline without SCTransform
+```{r}
+seurat_object <- FindVariableFeatures(seurat_object, selection.method = "vst", nfeatures = 2000)
+
+# Identify the 10 most highly variable genes
+top10 <- head(VariableFeatures(seurat_object), 10)
+
+# plot variable features with and without labels
+plot1 <- VariableFeaturePlot(seurat_object)
+plot2 <- LabelPoints(plot = plot1, points = top10, repel = TRUE)
+plot2
+
+#Next, we apply a linear transformation (‘scaling’) that is a standard pre-processing step prior to dimensional reduction techniques like PCA. The ScaleData() function:
+
+#Shifts the expression of each gene, so that the mean expression across cells is 0
+#Scales the expression of each gene, so that the variance across cells is 1
+#This step gives equal weight in downstream analyses, so that highly-expressed genes do not dominate
+#The results of this are stored in pbmc[["RNA"]]$scale.data
+#By default, only variable features are scaled.
+#You can specify the features argument to scale additional features
+#all.genes <- rownames(pbmc)
+#pbmc <- ScaleData(pbmc, features = all.genes)
+seurat_object <- ScaleData(seurat_object)
+```
+
+
+#Standard workflow with SCTransform
+```{r}
+library(future)
+#Основная проблема: функция SCTransform() использует большие объекты (например, FUN, umi_bin, data_step1), и они слишком тяжелые, чтобы быть переданы в параллельную сессию с текущим лимитом.
+# Увеличиваем лимит на размер глобальных переменных
+
+options(future.globals.maxSize = 2 * 1024^3)  # 2 GB
+seuratC57BL <- SCTransform(seuratC57BL, verbose = FALSE)
+seuratC3H <- SCTransform(seuratC3H, verbose = FALSE)
+```
+```{r}
+#look at most variable genes in both subsets
+top10C57BL <- head(VariableFeatures(seuratC57BL), 10)
+plotC57BL_vf <- LabelPoints(plot = VariableFeaturePlot(seuratC57BL), points = top10C57BL, repel = TRUE)
+
+top10C3H <- head(VariableFeatures(seuratC3H), 10)
+plotC3H_vf <- LabelPoints(plot = VariableFeaturePlot(seuratC3H), points = top10C3H, repel = TRUE)
+
+plotC57BL_vf
+plotC3H_vf
+```
+
+
+```{r}
+seuratC57BL <- RunPCA(seuratC57BL, features = VariableFeatures(object = seuratC57BL))
+seuratC57BL <- RunUMAP(seuratC57BL, dims = 1:30)
+seuratC57BL <- FindNeighbors(seuratC57BL, dims = 1:30)
+seuratC57BL <- FindClusters(seuratC57BL, resolution = 0.5)
+
+DimPlot(seuratC57BL, label = TRUE)
+DimPlot(seuratC57BL, reduction = "umap", group.by = "EC", label = TRUE, label.box = TRUE, repel = TRUE) + NoLegend()
+DimPlot(seuratC57BL, reduction = "umap", label = TRUE, label.box = TRUE, repel = TRUE) + NoLegend()
+```
+
+```{r}
+seuratC3H <- RunPCA(seuratC3H, features = VariableFeatures(object = seuratC3H))
+seuratC3H <- RunUMAP(seuratC3H, dims = 1:30)
+seuratC3H <- FindNeighbors(seuratC3H, dims = 1:30)
+seuratC3H <- FindClusters(seuratC3H, resolution = 0.5)
+
+DimPlot(seuratC3H, reduction = "umap", group.by = "EC", label = TRUE, label.box = TRUE, repel = TRUE) + NoLegend()
+DimPlot(seuratC3H, reduction = "umap", label = TRUE, label.box = TRUE, repel = TRUE) + NoLegend()
+```
+
+```{r}
+DimHeatmap(seuratC57BL, dims = 1:5, cells = 500, balanced = TRUE)
+```
+
+
+
+```{r}
+seuratC57BL.markers <- FindAllMarkers(seuratC57BL, only.pos = TRUE)
+seuratC57BL.markers %>%
+    group_by(cluster) %>%
+    dplyr::filter(avg_log2FC > 1) %>%
+    slice_head(n = 10) %>%
+    ungroup() -> top10
+DoHeatmap(seuratC57BL, features = top10$gene) + NoLegend()
+```
+
+
