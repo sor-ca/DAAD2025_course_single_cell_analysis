@@ -9,6 +9,13 @@ output:
     theme: united
 ---
 
+# Отримання даних 
+  Данні були взяті зі збору данних 2 досіджень про лікування раку простати. Перше називаеться "Tissue Collection and Results Gathering for Radiotherapy Patients & Healthy Individuals" (STU 072010-098), а друге " Phase I Clinical Study on Stereotactic Ablative Radiotherapy (SABR) for Pelvic and Prostate Areas in High-Risk Prostate Cancer Patients (STU062014-027)". . Посилання https://data.niaid.nih.gov/resources?id=zenodo_8270764
+
+  Секвенування РНК на рівні окремих клітин (scRNA-seq) проводилося в лабораторії доктора Дугласа Странда відповідно до методу, описаного в Henry et al¹. Ми застосовували 1-годинну обробку з використанням 5 мг/мл колагенази типу I, 10 мМ ROCK-інгібітора та 1 мг ДНКази. Штрихкодування для 3' GEX проводилося на апараті 10X, а секвенування виконувалося на пристрої Illumina NextSeq 500.
+
+
+
 # Підготовка данних 
 
 ```{r setup, include=FALSE}
