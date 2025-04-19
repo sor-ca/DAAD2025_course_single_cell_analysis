@@ -43,7 +43,7 @@ plot1mt5 + plot2mt5
 all.genes <- rownames(seurat_object1mt5)
 seurat_object1mt5 <- NormalizeData(seurat_object1mt5, normalization.method = "LogNormalize", scale.factor = 10000)
 seurat_object1mt5 <- ScaleData(seurat_object1mt5, features = all.genes)
-seurat_object1mt5 <- RunPCA(seurat_object1mt5, features = VariableFeatures(object = seurat_object1mt10))
+seurat_object1mt5 <- RunPCA(seurat_object1mt5, features = VariableFeatures(object = seurat_object1mt5))
 
 VizDimLoadings(seurat_object1mt5, dims = 1:2, reduction = "pca")
 
@@ -99,19 +99,17 @@ all_markers %>%
   dplyr::filter(avg_log2FC > 1) %>%
   slice_head(n = 10) %>%
   ungroup() -> top10
-DoHeatmap(seurat_object1mt5, features = top10$gene) + NoLegend()
+DoHeatmap(seurat_object1mt5, features = top10$gene) 
 
 saveRDS(seurat_object1mt5, file = "seurat_object1mt5_cluster9.rds")
 
 
 #перейменування кластерів відподно до клітин в них
-# Отримати поточні ідентифікатори
-Idents(seurat_object)
 
 # Перевизначити ідентифікатори
 seurat_object1mt5 <- RenameIdents(seurat_object1mt5,
                               '0' = 'T cells', 
-                              '1' = 'T cell',
+                              '1' = 'T cells',
                               '2' = 'B cells',
                               '3' = 'Nerve and smooth muscle cells',
                               '4' = 'Glandular epithelium',
@@ -126,4 +124,5 @@ seurat_object1mt5 <- RenameIdents(seurat_object1mt5,
 table(Idents(seurat_object1mt5))
 DimPlot(seurat_object1mt5, reduction = "umap")
 saveRDS(seurat_object1mt5, file = "seurat_object1mt5_cluster_NameClusters.rds")
+
 
