@@ -1,160 +1,129 @@
-install.packages("Seurat")
-install.packages("Matrix")
-remotes::install_github("satijalab/seurat-data", "seurat5", quiet = TRUE)
-remotes::install_github("satijalab/azimuth", "seurat5", quiet = TRUE)
-remotes::install_github("satijalab/seurat-wrappers", "seurat5", quiet = TRUE)
-remotes::install_github("stuart-lab/signac", "seurat5", quiet = TRUE)
-if (!requireNamespace("BiocManager", quietly = TRUE)) {
-  install.packages("BiocManager")
-}
-BiocManager::install(c("JASPAR2020", "TFBSTools"))
-
-
-install.packages(c("Seurat", "SeuratData"))
-
-# Data load
 library(dplyr)
 library(Seurat)
 library(SeuratWrappers)
 library(Azimuth)
 library(matrixStats)
-
 library(ggplot2)
 library(patchwork)
 options(future.globals.maxSize = 1e9)
 library(hdf5r)
-
-
-library(Seurat)
-library(dplyr)
 library(Matrix)
 setwd('D:/R_Genomix/S2/unser/data1/')
-
 
 seurat_object1 <- readRDS("10963_Fcol_5GEX.rds")
 seurat_object1 <- CreateSeuratObject(counts = seurat_object1)
 print(seurat_object1)
-#DimPlot(seurat_object1)
 
+# Переклад шару "counts" до "data"
+DefaultAssay(seurat_object1) <- "RNA"
+seurat_object1 <- SetAssayData(seurat_object1, slot = "data", new.data = GetAssayData(seurat_object1, slot = "counts"))
+print(seurat_object1)
+#DimPlot(seurat_object1)
 
 seurat_object1[["percent.mt"]] <- PercentageFeatureSet(seurat_object1, pattern = "^MT-")
 
 VlnPlot(seurat_object1, features = c("nFeature_RNA", "nCount_RNA",'percent.mt'), ncol = 3)
+
+# Відсіяти клітини, де частка мітохондріальних генів <= 5%
+seurat_object1mt5 <- subset(seurat_object1, subset = percent.mt <= 5)
+print(seurat_object1mt5)
+
 # Identify the 10 most highly variable genes
-top10 <- head(VariableFeatures(seurat_object1), 10)
+# спершу знайти гени, що варіюють, і далі визначити 10, що найбільше
+seurat_object1mt5 <- FindVariableFeatures(seurat_object1mt5)
+top10mt5 <- head(VariableFeatures(seurat_object1mt5), 10)
+print(top10mt5)
 
-plot1 <- FeatureScatter(seurat_object1, feature1 = "nCount_RNA", feature2 = "percent.mt")
-plot2 <- FeatureScatter(seurat_object1, feature1 = "nCount_RNA", feature2 = "nFeature_RNA")
-plot1 + plot2
+
+plot1mt5 <- FeatureScatter(seurat_object1mt5, feature1 = "nCount_RNA", feature2 = "percent.mt")
+plot2mt5 <- FeatureScatter(seurat_object1mt5, feature1 = "nCount_RNA", feature2 = "nFeature_RNA")
+plot1mt5 + plot2mt5
 
 
-#pbmc <- subset(pbmc, subset = nFeature_RNA > 200 & nFeature_RNA < 2500 & percent.mt < 5)
+all.genes <- rownames(seurat_object1mt5)
+seurat_object1mt5 <- NormalizeData(seurat_object1mt5, normalization.method = "LogNormalize", scale.factor = 10000)
+seurat_object1mt5 <- ScaleData(seurat_object1mt5, features = all.genes)
+seurat_object1mt5 <- RunPCA(seurat_object1mt5, features = VariableFeatures(object = seurat_object1mt10))
 
-seurat_object1 <- FindVariableFeatures(seurat_object1)
+VizDimLoadings(seurat_object1mt5, dims = 1:2, reduction = "pca")
 
-all.genes <- rownames(seurat_object1)
-seurat_object1 <- NormalizeData(seurat_object1, normalization.method = "LogNormalize", scale.factor = 10000)
-seurat_object1 <- ScaleData(seurat_object1, features = all.genes)
-seurat_object1 <- RunPCA(seurat_object1, features = VariableFeatures(object = seurat_object1))
+ElbowPlot(seurat_object1mt5)
+seurat_object1mt5 <- FindNeighbors(seurat_object1mt5, dims = 1:4)
+seurat_object1mt5 <- FindClusters(seurat_object1mt5, resolution = 0.5)
+seurat_object1mt5 <- RunUMAP(seurat_object1mt5, dims = 1:4)
 
-VizDimLoadings(seurat_object1, dims = 1:2, reduction = "pca")
+DimPlot(seurat_object1mt5, reduction = "umap")
 
-# Testing integration methods
-ElbowPlot(seurat_object1)
-seurat_object1 <- FindNeighbors(seurat_object1, dims = 1:11)
-seurat_object1 <- FindClusters(seurat_object1, resolution = 0.5)
-seurat_object1 <- RunUMAP(seurat_object1, dims = 1:11)
+saveRDS(seurat_object1mt5, file = "seurat_object1mt5_cluster.rds")
 
-DimPlot(seurat_object1, reduction = "umap")
+#знаходження маркерів для кожного кластеру4
+# find all markers of cluster 0
+cluster0.markers <- FindMarkers(seurat_object1mt5, ident.1 = 0)
+head(cluster0.markers, n = 5)
 
-# Відсіяти клітини, де частка мітохондріальних генів <= 10%
-seurat_object1mt10 <- subset(seurat_object1, subset = percent.mt <= 10)
+cluster1.markers <- FindMarkers(seurat_object1mt5, ident.1 = 1)
+head(cluster1.markers, n = 5)
 
-top10mt10 <- head(VariableFeatures(seurat_object1mt10), 10)
+cluster2.markers <- FindMarkers(seurat_object1mt5, ident.1 = 2)
+head(cluster2.markers, n = 5)
 
-plot1mt10 <- FeatureScatter(seurat_object1mt10, feature1 = "nCount_RNA", feature2 = "percent.mt")
-plot2mt10 <- FeatureScatter(seurat_object1mt10, feature1 = "nCount_RNA", feature2 = "nFeature_RNA")
-plot1mt10 + plot2mt10
+cluster3.markers <- FindMarkers(seurat_object1mt5, ident.1 = 3)
+head(cluster3.markers, n = 5)
 
-seurat_object1mt10 <- FindVariableFeatures(seurat_object1mt10)
+cluster4.markers <- FindMarkers(seurat_object1mt5, ident.1 = 4)
+head(cluster4.markers, n = 5)
 
-all.genes <- rownames(seurat_object1mt10)
-seurat_object1mt10 <- NormalizeData(seurat_object1mt10, normalization.method = "LogNormalize", scale.factor = 10000)
-seurat_object1mt10 <- ScaleData(seurat_object1mt10, features = all.genes)
-seurat_object1mt10 <- RunPCA(seurat_object1mt10, features = VariableFeatures(object = seurat_object1mt10))
+cluster5.markers <- FindMarkers(seurat_object1mt5, ident.1 = 5)
+head(cluster5.markers, n = 5)
 
-VizDimLoadings(seurat_object1mt10, dims = 1:2, reduction = "pca")
+cluster6.markers <- FindMarkers(seurat_object1mt5, ident.1 = 6)
+head(cluster6.markers, n = 5)
 
-ElbowPlot(seurat_object1mt10)
-seurat_object1mt10 <- FindNeighbors(seurat_object1mt10, dims = 1:5)
-seurat_object1mt10 <- FindClusters(seurat_object1mt10, resolution = 0.5)
-seurat_object1mt10 <- RunUMAP(seurat_object1mt10, dims = 1:5)
+cluster7.markers <- FindMarkers(seurat_object1mt5, ident.1 = 7)
+head(cluster7.markers, n = 5)
 
-DimPlot(seurat_object1mt10, reduction = "umap")
-ElbowPlot(seurat_object1mt10)
-seurat_object1mt10_11 <- FindNeighbors(seurat_object1mt10, dims = 1:11)
-seurat_object1mt10_11 <- FindClusters(seurat_object1mt10, resolution = 0.5)
-seurat_object1mt10_11 <- RunUMAP(seurat_object1mt10, dims = 1:11)
+cluster8.markers <- FindMarkers(seurat_object1mt5, ident.1 = 8)
+head(cluster8.markers, n = 5)
 
-DimPlot(seurat_object1mt10_11, reduction = "umap")
+cluster9.markers <- FindMarkers(seurat_object1mt5, ident.1 = 9)
+head(cluster9.markers, n = 5)
 
-seurat_object1mt10_11 <- FindVariableFeatures(seurat_object1mt10_11)
-head(VariableFeatures(seurat_object1mt10_11))
-markers1mt10_11 <- FindAllMarkers(seurat_object1mt10_11, only.pos = TRUE, min.pct = 0.25, logfc.threshold = 0.25)
-head(markers1mt10_11)
-DotPlot(seurat_object1mt10_11, features = markers1mt10_11$gene) + RotatedAxis()
+# find all markers for all clusters
+all_markers <- FindAllMarkers(seurat_object1mt5)
+head(all_markers) 
 
-duplicated_genes <- markers1mt10_11$gene[duplicated(markers1mt10_11$gene)]
-print(duplicated_genes)
-unique_genes <- unique(markers1mt10_11$gene)
-DotPlot(seurat_object1mt10_11, features = unique_genes) + RotatedAxis()
-Idents(seurat_object1mt10_11) <- factor(Idents(seurat_object1mt10_11), levels = unique(Idents(seurat_object1mt10_11)))
+#DoHeatmap(seurat_object1mt5, features = top10mt5$gene) + NoLegend()
 
-unique_markers1 <- markers1mt10_11[!duplicated(markers1mt10_11$gene), ]
-genes_by_cluster1 <- split(unique_markers1$gene, unique_markers1$cluster)
-print(genes_by_cluster1[["1"]])
+all_markers %>%
+  group_by(cluster) %>%
+  dplyr::filter(avg_log2FC > 1) %>%
+  slice_head(n = 10) %>%
+  ungroup() -> top10
+DoHeatmap(seurat_object1mt5, features = top10$gene) + NoLegend()
 
-str(genes_by_cluster1)
-print(genes_by_cluster1[["1"]])
-DotPlot(seurat_object1mt10_11, features = genes_by_cluster1[["1"]]) + RotatedAxis()
+saveRDS(seurat_object1mt5, file = "seurat_object1mt5_cluster9.rds")
 
-duplicated_levels <- markers1mt10_11$gene[duplicated(markers1mt10_11$gene)]
-print(duplicated_levels)
-markers1mt10_11$gene <- make.unique(as.character(markers1mt10_11$gene))
-DotPlot(seurat_object1mt10_11, features = markers1mt10_11$gene) + RotatedAxis()
 
-#знайти де дані для обрахунку
-slotNames(seurat_object1mt10_11@assays$RNA)
-names(seurat_object1mt10_11@assays$RNA@layers)
+#перейменування кластерів відподно до клітин в них
+# Отримати поточні ідентифікатори
+Idents(seurat_object)
 
-#Calculate Fold Change:
-expression_data <- seurat_object1mt10_11@assays$RNA@layers$data
+# Перевизначити ідентифікатори
+seurat_object1mt5 <- RenameIdents(seurat_object1mt5,
+                              '0' = 'T cells', 
+                              '1' = 'T cell',
+                              '2' = 'B cells',
+                              '3' = 'Nerve and smooth muscle cells',
+                              '4' = 'Glandular epithelium',
+                              '5' = 'Endothelium',
+                              '6' = 'Prostate cancer stromal cells',
+                              '7' = 'Tumor-associated macrophages',
+                              '8' = 'Tumor-associated monocytes',
+                              '9' = 'Cancer-associated fibroblasts (CAFs)'
+                              )
 
-markers1mt10_11$fold_change <- apply(expression_data[markers1mt10_11$gene, ], 1, function(x) max(x) / min(x + 1e-10))
 
-slotNames(seurat_object1mt10_11@assays$RNA)
-names(seurat_object1mt10_11@assays$RNA@layers)
-#Check if All Genes Exist in expression_data: Verify that the genes in markers1mt10_11$gene are present in the row names of expression_data:
-missing_genes <- setdiff(markers1mt10_11$gene, rownames(expression_data))
-print(missing_genes)
-#Filter markers1mt10_11 for Existing Genes: Remove genes from markers1mt10_11 that are not present in expression_data
-markers1mt10_11 <- markers1mt10_11[markers1mt10_11$gene %in% rownames(expression_data), ]
-#Recalculate Fold Change: Once the markers1mt10_11 object only contains genes present in expression_data, retry your fold change calculation
-markers1mt10_11$fold_change <- apply(expression_data[markers1mt10_11$gene, ], 1, function(x) max(x) / min(x + 1e-10))
-#Filter Markers with Fold Change > 3
-filtered_markers <- markers1mt10_11[markers1mt10_11$fold_change > 1, ]
-#Create DotPlot with Filtered Markers
-DotPlot(seurat_object1mt10_11, features = filtered_markers$gene) + RotatedAxis()
-
-missing_genes <- setdiff(filtered_markers$gene, rownames(seurat_object1mt10_11@assays$RNA@layers$data))
-print(missing_genes)
-DefaultAssay(seurat_object1mt10_11) <- "RNA"
-DotPlot(seurat_object1mt10_11, features = filtered_markers$gene) + RotatedAxis()
-rlang::last_trace()
-
-missing_genes <- setdiff(filtered_markers$gene, rownames(seurat_object1mt10_11@assays$RNA@layers$data))
-print(missing_genes)
-filtered_markers <- filtered_markers[filtered_markers$gene %in% rownames(seurat_object1mt10_11@assays$RNA@layers$data), ]
-DotPlot(seurat_object1mt10_11, features = filtered_markers$gene) + RotatedAxis()
-
+table(Idents(seurat_object1mt5))
+DimPlot(seurat_object1mt5, reduction = "umap")
+saveRDS(seurat_object1mt5, file = "seurat_object1mt5_cluster_NameClusters.rds")
 
