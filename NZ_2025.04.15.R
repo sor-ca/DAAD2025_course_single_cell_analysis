@@ -56,8 +56,7 @@ DimPlot(seurat_object1mt5, reduction = "umap")
 
 saveRDS(seurat_object1mt5, file = "seurat_object1mt5_cluster.rds")
 
-#знаходження маркерів для кожного кластеру4
-# find all markers of cluster 0
+#знаходження маркерів для кожного кластеру
 cluster0.markers <- FindMarkers(seurat_object1mt5, ident.1 = 0)
 head(cluster0.markers, n = 5)
 
@@ -92,7 +91,7 @@ head(cluster9.markers, n = 5)
 all_markers <- FindAllMarkers(seurat_object1mt5)
 head(all_markers) 
 
-#DoHeatmap(seurat_object1mt5, features = top10mt5$gene) + NoLegend()
+#DoHeatmap(seurat_object1mt5, features = top10mt5$gene) 
 
 all_markers %>%
   group_by(cluster) %>%
@@ -106,7 +105,7 @@ saveRDS(seurat_object1mt5, file = "seurat_object1mt5_cluster9.rds")
 
 #перейменування кластерів відподно до клітин в них
 
-# Перевизначити ідентифікатори
+# Перевизначити ідентифікатори, паралельно обєднавши кластери 0 та 1
 seurat_object1mt5 <- RenameIdents(seurat_object1mt5,
                               '0' = 'T cells', 
                               '1' = 'T cells',
