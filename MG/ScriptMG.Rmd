@@ -27,6 +27,12 @@ plot(pressure)
 ```
 
 Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
+```{r, echo = FALSE}
+if (!require("BiocManager", quietly = TRUE))
+    install.packages("BiocManager")
+BiocManager::install("Seurat")
+
+```
 
 ```{r}
 library(Seurat)
@@ -34,6 +40,7 @@ library(clustree)
 library(cluster)
 library(ggplot2)
 library(dplyr)
+library(Matrix)
 ```
 ```{r}
 count_matrix <- read.delim("counts_UMI.csv", row.names = 1, check.names = FALSE)
@@ -76,54 +83,58 @@ seurat_object <- CreateSeuratObject(counts = count_matrix, meta.data = metadata,
 ```
 ```{r}
 #data cleaning - mtRNA
-seurat_object[["percent.mt"]] <- PercentageFeatureSet(seurat_object, pattern = "^MT-")
+#seurat_object[["percent.mt"]] <- PercentageFeatureSet(seurat_object, pattern = "^MT-")
 
-clean_plot <- VlnPlot(seurat_object, features = c("nFeature_RNA", "nCount_RNA",'percent.mt'), ncol = 3)
-clean_plot
+#clean_plot <- VlnPlot(seurat_object, features = c("nFeature_RNA", "nCount_RNA",'percent.mt'), ncol = 3)
+#clean_plot
 
 #according to this plot, we see that all the cells have percent.mt < 5 (or mt genes are not presentedd in the data table)
 
 # FeatureScatter is typically used to visualize feature-feature relationships, but can be used for anything calculated by the object, i.e. columns in object metadata, PC scores etc.
-FeatureScatter(seurat_object, feature1 = "nCount_RNA", feature2 = "nFeature_RNA")
+#FeatureScatter(seurat_object, feature1 = "nCount_RNA", feature2 = "nFeature_RNA")
 
 #according to this plot, we remove outlets
-seurat_object <- subset(seurat_object, subset = nFeature_RNA > 200 & nFeature_RNA < 6000 & percent.mt < 5)
+#seurat_object <- subset(seurat_object, subset = nFeature_RNA > 200 & nFeature_RNA < 6000 & percent.mt < 5)
 seurat_object <- subset(seurat_object, subset = nFeature_RNA > 200 & nFeature_RNA < 6000)
 ```
-divide into two subsets according to mouse line
+```{r, echo=TRUE}
+BiocManager::install("SingleR")
+BiocManager::install("BiocGenerics")
+BiocManager::install("Biobase")
+BiocManager::install("BiocNeighbors")
+BiocManager::install("BiocParallel")
+BiocManager::install("BiocSingular")
+install.packages("bit64")
+install.packages("blob")
+BiocManager::install("Biostrings")
+BiocManager::install("celldex")
+BiocManager::install("SingleCellExperiment")
+```
+
+# Cell annotation
+```{r, echo=TRUE}
+library(SingleR)
+library(celldex)
+library(SingleCellExperiment)
+
+ref <- celldex::MouseRNAseqData()
+#ref <- celldex::ImmGenData()
+
+pred <- SingleR(test = seurat_object[["RNA"]]$counts, ref = ref, labels = ref$label.main)
+
+seurat_object$cell_type <- pred$labels
+```
+
+#divide into two subsets according to mouse line
 ```{r}
 seuratC57BL <- subset(seurat_object, subset = mouse_line == 'C57BL/6N')
 seuratC3H <- subset(seurat_object, subset = mouse_line == 'C3H/HeN')
 
 ```
-#pipeline without SCTransform
-```{r}
-seurat_object <- FindVariableFeatures(seurat_object, selection.method = "vst", nfeatures = 2000)
-
-# Identify the 10 most highly variable genes
-top10 <- head(VariableFeatures(seurat_object), 10)
-
-# plot variable features with and without labels
-plot1 <- VariableFeaturePlot(seurat_object)
-plot2 <- LabelPoints(plot = plot1, points = top10, repel = TRUE)
-plot2
-
-#Next, we apply a linear transformation (‘scaling’) that is a standard pre-processing step prior to dimensional reduction techniques like PCA. The ScaleData() function:
-
-#Shifts the expression of each gene, so that the mean expression across cells is 0
-#Scales the expression of each gene, so that the variance across cells is 1
-#This step gives equal weight in downstream analyses, so that highly-expressed genes do not dominate
-#The results of this are stored in pbmc[["RNA"]]$scale.data
-#By default, only variable features are scaled.
-#You can specify the features argument to scale additional features
-#all.genes <- rownames(pbmc)
-#pbmc <- ScaleData(pbmc, features = all.genes)
-seurat_object <- ScaleData(seurat_object)
-```
-
 
 #Standard workflow with SCTransform
 ```{r}
+#install.packages("future")
 library(future)
 #Основная проблема: функция SCTransform() использует большие объекты (например, FUN, umi_bin, data_step1), и они слишком тяжелые, чтобы быть переданы в параллельную сессию с текущим лимитом.
 # Увеличиваем лимит на размер глобальных переменных
@@ -151,8 +162,7 @@ seuratC57BL <- RunUMAP(seuratC57BL, dims = 1:30)
 seuratC57BL <- FindNeighbors(seuratC57BL, dims = 1:30)
 seuratC57BL <- FindClusters(seuratC57BL, resolution = 0.5)
 
-DimPlot(seuratC57BL, label = TRUE)
-DimPlot(seuratC57BL, reduction = "umap", group.by = "EC", label = TRUE, label.box = TRUE, repel = TRUE) + NoLegend()
+DimPlot(seuratC57BL, reduction = "umap", group.by = "EC", repel = TRUE)
 DimPlot(seuratC57BL, reduction = "umap", label = TRUE, label.box = TRUE, repel = TRUE) + NoLegend()
 ```
 
@@ -162,7 +172,7 @@ seuratC3H <- RunUMAP(seuratC3H, dims = 1:30)
 seuratC3H <- FindNeighbors(seuratC3H, dims = 1:30)
 seuratC3H <- FindClusters(seuratC3H, resolution = 0.5)
 
-DimPlot(seuratC3H, reduction = "umap", group.by = "EC", label = TRUE, label.box = TRUE, repel = TRUE) + NoLegend()
+DimPlot(seuratC3H, reduction = "umap", group.by = "EC", repel = TRUE)
 DimPlot(seuratC3H, reduction = "umap", label = TRUE, label.box = TRUE, repel = TRUE) + NoLegend()
 ```
 
@@ -170,6 +180,29 @@ DimPlot(seuratC3H, reduction = "umap", label = TRUE, label.box = TRUE, repel = T
 DimHeatmap(seuratC57BL, dims = 1:5, cells = 500, balanced = TRUE)
 ```
 
+```{r}
+# Convenience functions
+fig_path <- ""
+SaveFigure <- function(plots, name, type = "png", width, height, res){
+  if(type == "png") {
+    png(paste0(fig_path, name, ".", type),
+      width = width, height = height, units = "in", res = 200)
+  } else {
+    pdf(paste0(fig_path, name, ".", type),
+      width = width, height = height)
+  }
+  print(plots)
+  dev.off()
+}
+
+SaveObject <- function(object, name){
+  saveRDS(object, paste0(data_path, name, ".RDS"))
+}
+
+ReadObject <- function(name){
+  readRDS(paste0(data_path, name, ".RDS"))
+}
+```
 
 
 ```{r}
@@ -178,8 +211,410 @@ seuratC57BL.markers %>%
     group_by(cluster) %>%
     dplyr::filter(avg_log2FC > 1) %>%
     slice_head(n = 10) %>%
-    ungroup() -> top10
-DoHeatmap(seuratC57BL, features = top10$gene) + NoLegend()
+    ungroup() -> top10C57BL
+#marker_map_C57BL <- DoHeatmap(seuratC57BL, features = top10C57BL$gene) + NoLegend()
+#SaveFigure(marker_map_C57BL, "markers_C57BL_save", width = 30, height = 30, res = 200)
 ```
+
+```{r}
+seuratC3H.markers <- FindAllMarkers(seuratC3H, only.pos = TRUE)
+seuratC3H.markers %>%
+    group_by(cluster) %>%
+    dplyr::filter(avg_log2FC > 1) %>%
+    slice_head(n = 10) %>%
+    ungroup() -> top10C3H
+#marker_map_C3H <- DoHeatmap(seuratC3H, features = top10C3H$gene) + NoLegend()
+#SaveFigure(marker_map_C3H, "markers_C3H_save", width = 30, height = 30, res = 200)
+```
+
+
+
+
+# Анотація клітин
+```{r}
+DimPlot(seuratC57BL, group.by = "cell_type",
+        label = TRUE, 
+        repel = TRUE, 
+        label.size = 5) + 
+  NoLegend()
+
+DimPlot(seuratC3H, group.by = "cell_type",
+        label = TRUE, 
+        repel = TRUE, 
+        label.size = 5) + 
+  NoLegend()
+```
+#mapping clusters with cell types
+#for seuratC57BL
+```{r}
+# Table of cell types per cluster
+table <- table(seuratC57BL$seurat_clusters, seuratC57BL$cell_type)
+
+# Convert to a data frame for easier manipulation
+cluster_annotations <- as.data.frame.matrix(table)
+
+ec_labels <- as.data.frame.matrix(table(seuratC57BL$seurat_clusters, seuratC57BL$EC))
+
+# Get the top annotation per cluster
+top_annotation <- apply(cluster_annotations, 1, function(x) names(x)[which.max(x)])
+
+ec_annotation <- apply(ec_labels, 1, function(x) names(x)[which.max(x)])
+
+# View cluster-to-cell type mapping
+cluster_map_C57 <- data.frame(
+  Cluster = rownames(cluster_annotations),
+  Cell_Type = top_annotation,
+  EC = ec_annotation
+)
+
+#write.csv(cluster_map_C57, "cluster_map_C57")
+
+# Create a new column with cluster labels mapped to cell types
+seuratC57BL$ClusterAnnotation <- cluster_map_C57$Cell_Type[match(seuratC57BL$seurat_clusters, cluster_map_C57$Cluster)]
+
+seuratC57BL$ECAnnotation <- cluster_map_C57$EC[match(seuratC57BL$seurat_clusters, cluster_map_C57$Cluster)]
+
+# Colored by cluster-dominant cell type mapping
+DimPlot(seuratC57BL, group.by = "ClusterAnnotation", label = TRUE, repel = TRUE) + 
+  ggtitle("Clusters Mapped to Dominant Cell Types") + NoLegend()
+```
+
+```{r}
+dotC57 <- DotPlot(
+  seuratC57BL,
+  features = unique(top10C57BL$gene),  # or pick genes of interest
+  group.by = "ClusterAnnotation",
+  split.by = "ECAnnotation"
+) + RotatedAxis() + NoLegend()
+SaveFigure(dotC57, "dotC57", width = 40, height = 20, res = 200)
+```
+
+#for seuratC3H
+```{r}
+# Table of cell types per cluster
+table <- table(seuratC3H$seurat_clusters, seuratC3H$cell_type)
+
+# Convert to a data frame for easier manipulation
+cluster_annotations <- as.data.frame.matrix(table)
+
+ec_labels <- as.data.frame.matrix(table(seuratC3H$seurat_clusters, seuratC3H$EC))
+
+# Get the top annotation per cluster
+top_annotation <- apply(cluster_annotations, 1, function(x) names(x)[which.max(x)])
+
+ec_annotation <- apply(ec_labels, 1, function(x) names(x)[which.max(x)])
+
+# View cluster-to-cell type mapping
+cluster_map_C3H <- data.frame(
+  Cluster = rownames(cluster_annotations),
+  Cell_Type = top_annotation,
+  EC = ec_annotation
+)
+
+write.csv(cluster_map_C3H, "cluster_map_C3H")
+
+# Create a new column with cluster labels mapped to cell types
+seuratC3H$ClusterAnnotation <- cluster_map_C3H$Cell_Type[match(seuratC3H$seurat_clusters, cluster_map_C3H$Cluster)]
+
+seuratC3H$ECAnnotation <- cluster_map_C3H$EC[match(seuratC3H$seurat_clusters, cluster_map_C3H$Cluster)]
+
+# Colored by cluster-dominant cell type mapping
+DimPlot(seuratC3H, group.by = "ClusterAnnotation", label = TRUE, repel = TRUE) + 
+  ggtitle("Clusters Mapped to Dominant Cell Types") + NoLegend()
+```
+
+```{r}
+dotC3H <- DotPlot(
+  seuratC3H,
+  features = unique(top10C3H$gene),  # or pick genes of interest
+  group.by = "ClusterAnnotation",
+  split.by = "ECAnnotation"
+) + RotatedAxis() + NoLegend()
+SaveFigure(dotC3H, "dotC3H", width = 40, height = 20, res = 200)
+```
+#Heatmap for clusters with EC and cell type
+#for C57BL
+```{r}
+# Combine experimental condition and cell type into one grouping variable
+seuratC57BL$HeatmapGroup <- paste(seuratC57BL$ECAnnotation, seuratC57BL$ClusterAnnotation,   seuratC57BL$seurat_clusters, sep = "_")
+
+# Set it as the active identity
+Idents(seuratC57BL) <- "HeatmapGroup"
+
+heatC57 <- DoHeatmap(seuratC57BL, features = top10C57BL$gene, angle = 90) + NoLegend()
+
+SaveFigure(heatC57, "heatC57", width = 30, height = 40, res = 200)
+
+#axis.text.y = element_text(size = 8), axis.text.x = element_text(size = 8),
+#+ ggplot2::ggtitle("Top Marker Heatmap Grouped by Condition and Cell Type")
+
+```
+
+#for C3H
+```{r}
+# Combine experimental condition and cell type into one grouping variable
+seuratC3H$HeatmapGroup <- paste(seuratC3H$ECAnnotation, seuratC3H$ClusterAnnotation,   seuratC3H$seurat_clusters, sep = "_")
+
+# Set it as the active identity
+Idents(seuratC3H) <- "HeatmapGroup"
+
+heatC3H <- DoHeatmap(seuratC3H, features = top10C3H$gene, angle = 90) + NoLegend()
+
+SaveFigure(heatC3H, "heatC3H", width = 30, height = 40, res = 200)
+```
+#DE of different cell types between experiment and control
+
+```{r}
+BiocManager::install("EnhancedVolcano")
+library(EnhancedVolcano)
+
+Idents(seuratC57BL) <- "ClusterAnnotation"
+celltypes <- levels(seuratC57BL)
+# List to store DE results
+de_list <- list()
+
+for (celltype in celltypes) {
+  cat("Running DE for:", celltype, "\n")
+  
+  # Subset to one cell type
+  seurat_obj <- subset(seuratC57BL, idents = celltype)
+  
+  # Check if both conditions are present
+  ec_groups <- table(seurat_obj$ECAnnotation)
+  
+  if (length(ec_groups) < 2) {
+    cat("  Skipping:", celltype, "- only one condition present\n")
+    next
+  }
+  
+  # Set ECAnnotation as identity
+  Idents(seurat_obj) <- "ECAnnotation"
+  
+  # Run DE: Experiment vs Control
+  de <- FindMarkers(
+    seurat_obj,
+    ident.1 = "experiment",
+    ident.2 = "control",
+    logfc.threshold = 0.1,
+    min.pct = 0.1,
+    return.thresh = 1
+  )
+  
+  # Add gene names and cell type info
+  de$gene <- rownames(de)
+  de$celltype <- celltype
+  
+  # Store
+  de_list[[celltype]] <- de
+}
+# Combine into one big table
+all_de <- bind_rows(de_list)
+
+# Plot function
+plot_volcano <- function(df, celltype, top_n = 10) {
+  #df <- df %>%     mutate(sig = ifelse(p_val_adj < 0.05 & abs(avg_log2FC) > 1.2, Significant", "Not"))
+
+  # Select top genes by smallest adjusted p-value
+  #top_genes <- df %>% arrange(abs(avg_log2FC)) %>% head(top_n)
+
+  #ggplot(df, aes(x = avg_log2FC, y = -log10(p_val_adj), color = sig))
+  #ggplot(df, aes(x = avg_log2FC, y = -log10(p_val_adj))) +
+    #geom_point(alpha = 0.6, size = 1) +
+    #geom_text_repel(
+      #data = top_genes,
+      #aes(label = gene),
+      #size = 3,
+      #box.padding = 0.3,
+      #max.overlaps = Inf
+    #) +
+    #scale_color_manual(values = c("Significant" = "tomato", "Not" = "gray")) +
+    #labs(
+      #title = paste("Volcano Plot:", celltype),
+     # x = "Log2 Fold Change (Exp vs Ctrl)",
+      #y = "-log10(Adj P-Value)"
+    #) +
+    #theme_minimal()
+  EnhancedVolcano(df,
+                lab = rownames(df),
+                x = "avg_log2FC",
+                y = "p_val_adj",
+                title = paste("Volcano Plot:", celltype),
+                pCutoff = 0.05,
+                FCcutoff = 1.2) #+
+          #ggplot2::coord_cartesian(xlim=c(-1, 1), ylim = c(0,3)) + 
+          #ggplot2::scale_x_continuous(breaks=seq(-1,1, 1)) + 
+          #ggplot2::scale_y_continuous(breaks=seq(0,3, 1))
+
+  #LabelPoints(plot, top10, repel = TRUE)
+}
+  
+  
+
+
+# Plot volcano for each cell type
+for (celltype in celltypes) {
+  print(celltype)
+ if (!is.null(de_list[[celltype]])) {
+    volcano <- plot_volcano(de_list[[celltype]], celltype)
+    print(volcano)
+  } else {
+    cat("Skipped:", celltype, "- no DE data\n")
+  }
+}
+```
+
+
+#pipeline without SCTransform
+```{r}
+seurat_object <- FindVariableFeatures(seurat_object, selection.method = "vst", nfeatures = 2000)
+
+# Identify the 10 most highly variable genes
+top10 <- head(VariableFeatures(seurat_object), 10)
+
+# plot variable features with and without labels
+plot1 <- VariableFeaturePlot(seurat_object)
+plot2 <- LabelPoints(plot = plot1, points = top10, repel = TRUE)
+plot2
+
+#Next, we apply a linear transformation (‘scaling’) that is a standard pre-processing step prior to dimensional reduction techniques like PCA. The ScaleData() function:
+
+#Shifts the expression of each gene, so that the mean expression across cells is 0
+#Scales the expression of each gene, so that the variance across cells is 1
+#This step gives equal weight in downstream analyses, so that highly-expressed genes do not dominate
+#The results of this are stored in pbmc[["RNA"]]$scale.data
+#By default, only variable features are scaled.
+#You can specify the features argument to scale additional features
+#all.genes <- rownames(pbmc)
+#pbmc <- ScaleData(pbmc, features = all.genes)
+seurat_object <- ScaleData(seurat_object)
+```
+
+
+#collect top10 markers for each claster in dataframe
+```{r}
+cluster.markers <- FindMarkers(seuratC57BL, ident.1 = 0)
+top10markers <- head(cluster.markers, n = 10)
+dfC57BL<-data.frame(1, row.names(top10markers))
+names(dfC57BL)<-c("cluster","genes")
+library(tidyverse)
+for (x in 1:22) {
+  cluster.markers <- FindMarkers(seuratC57BL, ident.1 = x)
+  top10markers <- head(cluster.markers, n = 10)
+  dfC57BL %>% add_row(cluster = x, genes = row.names(top10markers))
+}
+write.csv(dfC57BL, "dfC57BL.csv")
+```
+
+```{r}
+cluster.markers <- FindMarkers(seuratC3H, ident.1 = 0)
+top10markers <- head(cluster.markers, n = 10)
+dfC3H<-data.frame(1, row.names(top10markers))
+names(dfC3H)<-c("cluster","genes")
+for (x in 1:23) {
+  cluster.markers <- FindMarkers(seuratC3H, ident.1 = x)
+  top10markers <- head(cluster.markers, n = 10)
+  dfC3H %>% add_row(cluster = x, genes = row.names(top10markers))
+}
+write.csv(dfC3H, "dfC3H.csv")
+```
+
+#attempt to create complex heatmap
+```{r}
+#install.packages("circlize")
+#BiocManager::install("ComplexHeatmap")
+
+library(ComplexHeatmap)
+library(circlize)
+
+# Get cell-level metadata
+meta <- seuratC57BL@meta.data
+meta$cell_id <- rownames(meta)
+
+# Prepare sort key
+meta$ECAnnotation <- factor(meta$ECAnnotation)  # ensure consistent order
+meta$ClusterAnnotation <- factor(meta$ClusterAnnotation)
+meta$seurat_clusters <- factor(meta$seurat_clusters, levels = sort(as.numeric(unique(meta$seurat_clusters))))
+
+# Sort metadata by EC → Cell Type → Cluster
+meta_sorted <- meta[order(meta$ECAnnotation, meta$ClusterAnnotation, meta$seurat_clusters), ]
+
+# Use scaled data (used in DoHeatmap)
+expr_matrix <- as.matrix(
+  GetAssayData(
+    seuratC57BL, 
+    layer = "data", 
+    assay = "SCT")[
+    top10C57BL$gene, 
+    ]
+  )
+
+expr_matrix <- heatmap_matrix[, meta_sorted$cell_id]
+
+## scale the rows
+scaled_matrix<- t(scale(t(expr_matrix)))
+
+# Keep only top marker genes
+#top_genes <- unique(top10$gene)
+#heatmap_matrix <- scaled_matrix[top_genes, ]
+
+# Make sure cells (columns) are in the same order as the matrix
+cells_order <- colnames(heatmap_matrix)
+
+# Create annotations
+cluster_ann <- seuratC57BL$seurat_clusters[cells_order]
+celltype_ann <- seuratC57BL$ClusterAnnotation[cells_order]
+condition_ann <- seuratC57BL$ECAnnotation[cells_order]
+
+# Combine into a data frame
+column_annotations <- data.frame(
+  Cluster = cluster_ann,
+  CellType = celltype_ann,
+  Condition = condition_ann
+)
+
+# Optional: set colors
+cluster_colors <- rainbow(length(unique(cluster_ann)))
+names(cluster_colors) <- unique(cluster_ann)
+
+celltype_colors <- RColorBrewer::brewer.pal(length(unique(celltype_ann)), "Set3")
+names(celltype_colors) <- unique(celltype_ann)
+
+condition_colors <- c("control" = "skyblue", "experiment" = "tomato")
+
+# Recreate the Seurat expression scale
+palette_expression_level = circlize::colorRamp2(
+  c(min(expr_matrix), median(expr_matrix), min(2.5, max(expr_matrix))),
+  c("#FF00FF", "#000000", "#FFFF00"))
+
+
+# Create ComplexHeatmap annotations
+col_ha <- HeatmapAnnotation(
+  Condition = condition_ann,
+  CellType = celltype_ann,
+  Cluster = cluster_ann,
+  col = list(
+    Cluster = cluster_colors,
+    CellType = celltype_colors,
+    Condition = condition_colors
+  ),
+  annotation_name_side = "left"
+)
+
+Heatmap(
+  scaled_matrix,
+  name = "Expression",
+  top_annotation = col_ha,
+  show_column_names = FALSE,
+  show_row_names = TRUE,
+  cluster_columns = FALSE,
+  cluster_rows = FALSE,
+  # Color scale for expression
+  col = palette_expression_level,
+  # Otherwise you get random vertical white lines where there should not be any
+  use_raster = FALSE
+)
+```
+
+
 
 
