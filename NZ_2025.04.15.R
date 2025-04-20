@@ -48,6 +48,7 @@ seurat_object1mt5 <- RunPCA(seurat_object1mt5, features = VariableFeatures(objec
 VizDimLoadings(seurat_object1mt5, dims = 1:2, reduction = "pca")
 
 ElbowPlot(seurat_object1mt5)
+#згідно графіку, лише перші 4 компоненти найбільш вагомі, тому далі лише 4
 seurat_object1mt5 <- FindNeighbors(seurat_object1mt5, dims = 1:4)
 seurat_object1mt5 <- FindClusters(seurat_object1mt5, resolution = 0.5)
 seurat_object1mt5 <- RunUMAP(seurat_object1mt5, dims = 1:4)
