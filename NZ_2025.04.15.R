@@ -124,4 +124,14 @@ table(Idents(seurat_object1mt5))
 DimPlot(seurat_object1mt5, reduction = "umap")
 saveRDS(seurat_object1mt5, file = "seurat_object1mt5_cluster_NameClusters.rds")
 
+#подивитися ген CD31 або ще названий PECAM1 (ендотеліальний маркер, але не у статті) у всіх кластерах
+FeaturePlot(seurat_object1mt5, features = "PECAM1")
+VlnPlot(seurat_object1mt5, features = "PECAM1", pt.size = 0.1)
 
+#замінити ген CD31 // PECAM1 на ген CD200 як маркер ендотелію
+FeaturePlot(seurat_object1mt5, features = "CD200")
+VlnPlot(seurat_object1mt5, features = "CD200", pt.size = 0.1)
+
+#маркер на фібробласти PDPN Podoplanin
+FeaturePlot(seurat_object1mt5, features = "PDPN")
+VlnPlot(seurat_object1mt5, features = "PDPN", pt.size = 0.1)
