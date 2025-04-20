@@ -136,3 +136,9 @@ VlnPlot(seurat_object1mt5, features = "CD200", pt.size = 0.1)
 #маркер на фібробласти PDPN Podoplanin
 FeaturePlot(seurat_object1mt5, features = "PDPN")
 VlnPlot(seurat_object1mt5, features = "PDPN", pt.size = 0.1)
+
+
+## аналіз t-SNE
+
+seurat_object1mt5t <- RunTSNE(seurat_object1mt5, dims = 1:4)
+DimPlot(seurat_object1mt5t, reduction = "tsne", label = TRUE, pt.size = 1)
