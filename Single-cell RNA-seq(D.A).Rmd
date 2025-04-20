@@ -1,0 +1,321 @@
+---
+title: "Аналіз scRNA-seq даних "
+author: "Dima Aleksandrovich"
+date: "2025-04-16"
+output: 
+  html_document:
+    toc: true
+    toc_float: true
+    theme: united
+---
+
+# Отримання даних 
+  Данні були взяті зі збору данних 2 досіджень про лікування раку простати. Перше називаеться "Tissue Collection and Results Gathering for Radiotherapy Patients & Healthy Individuals" (STU 072010-098), а друге " Phase I Clinical Study on Stereotactic Ablative Radiotherapy (SABR) for Pelvic and Prostate Areas in High-Risk Prostate Cancer Patients (STU062014-027)". . Посилання https://data.niaid.nih.gov/resources?id=zenodo_8270764
+
+  Секвенування РНК на рівні окремих клітин (scRNA-seq) проводилося в лабораторії доктора Дугласа Странда відповідно до методу, описаного в Henry et al¹. Ми застосовували 1-годинну обробку з використанням 5 мг/мл колагенази типу I, 10 мМ ROCK-інгібітора та 1 мг ДНКази. Штрихкодування для 3' GEX проводилося на апараті 10X, а секвенування виконувалося на пристрої Illumina NextSeq 500.
+
+
+
+# Підготовка данних 
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+## Завантаження даних
+```{r data, echo=FALSE}
+obj <- readRDS("10997_PCaFcol_5GEX.rds")
+
+```
+# Підготовка бібліотек
+
+```{r library, include=FALSE}
+
+library(SeuratObject)
+library(dplyr)
+library(Seurat)
+library(patchwork)
+library(ggplot2)
+library(clusterProfiler)
+library(enrichplot)
+library(org.Hs.eg.db)
+library(tibble)
+library(dplyr)
+library(SeuratObject)
+library(SingleR)
+library(celldex)
+library(ggrepel)
+library(DT)
+library(plotly)
+library(rstatix)
+library(ggpubr)
+library(shiny)
+
+
+
+```
+```{r information, echo=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+# Інформація щодо встановлених бібліотек
+installed_packages <- installed.packages()[names(sessionInfo()$otherPkgs), "Version"]
+installed_packages <- data.frame(names(installed_packages), installed_packages)
+r_version <- c("R",strsplit(version[['version.string']], ' ')[[1]][3])
+installed_packages <- rbind(r_version, installed_packages)
+rownames(installed_packages) <- NULL
+colnames(installed_packages) <- c("Пакет або ПЗ", "Версія")
+datatable(installed_packages, extensions = "Buttons", options = list(dom = 'Blfrtip',
+                           buttons = c('copy', 'csv', 'excel', 'pdf', 'print')))
+
+
+```
+
+# виявлення відсоток мітохондріального днк від транскриптів а також кількість рнк від транскриптів 
+
+```{r Filter, echo=FALSE}
+pbmc <- CreateSeuratObject(counts = obj, project = "pbmc3k", min.cells = 3, min.features = 200)
+pbmc[["percent.mt"]] <- PercentageFeatureSet(pbmc,pattern = "^MT-")
+# виявлення відсоток мітохондріального днк від транскриптів а також кількість рнк від транскриптів
+VlnPlot(pbmc, features = c("nFeature_RNA", "nCount_RNA", "percent.mt"), ncol = 3)
+plot1 <- FeatureScatter(pbmc, feature1 = "nCount_RNA", feature2 = "percent.mt")
+plot2 <- FeatureScatter(pbmc, feature1 = "nCount_RNA", feature2 = "nFeature_RNA")
+plot1 + plot2
+``` 
+
+# фільтрація данних
+```{r Filter 2, echo=FALSE}
+pbmc <- subset(pbmc, subset = nFeature_RNA > 200 & nFeature_RNA < 2500 & percent.mt < 5)
+VlnPlot(pbmc, features = c("nFeature_RNA", "nCount_RNA", "percent.mt"), ncol = 3)
+plot1 <- FeatureScatter(pbmc, feature1 = "nCount_RNA", feature2 = "percent.mt")
+plot2 <- FeatureScatter(pbmc, feature1 = "nCount_RNA", feature2 = "nFeature_RNA")
+plot1 + plot2
+```
+```{r normalization, echo=TRUE}
+# нормалізація данних
+pbmc <- NormalizeData(pbmc)
+
+# розподілення генів за тим за скільки функцій вони відповідають
+pbmc <- FindVariableFeatures(pbmc, selection.method = "vst", nfeatures = 2000)
+
+# виявлення топ 10 варіабельних генів
+top10 <- head(VariableFeatures(pbmc), 10)
+top10
+```
+# графік за цими дослідженнями
+```{r graph , echo=TRUE}
+plot1 <- VariableFeaturePlot(pbmc)
+plot2 <- LabelPoints(plot = plot1, points = top10, repel = TRUE)
+plot1 + plot2
+all.genes <- rownames(pbmc)
+pbmc <- ScaleData(pbmc, features = all.genes)
+
+```
+# Виконання PCA
+```{r PCA, echo=TRUE}
+pbmc <- RunPCA(pbmc, features = VariableFeatures(object = pbmc))
+VizDimLoadings(pbmc, dims = 1:2, reduction = "pca")
+DimPlot(pbmc, reduction = "pca") + NoLegend()
+DimHeatmap(pbmc, dims = 1, cells = 500, balanced = TRUE)
+DimHeatmap(pbmc, dims = 1:15, cells = 500, balanced = TRUE)
+ElbowPlot(pbmc)
+```
+# Кластеризація
+```{r Clasters, echo=TRUE}
+
+pbmc <- FindNeighbors(pbmc, dims = 1:10)
+pbmc <- FindClusters(pbmc, resolution = 0.5)
+head(Idents(pbmc), 5)
+pbmc <- RunUMAP(pbmc, dims = 1:10)
+DimPlot(pbmc, reduction = "umap")
+
+```
+#  Знаходження маркерів генів у всіх кластерів
+
+```{r Marker, echo=TRUE}
+
+pbmc.markers <- FindAllMarkers(pbmc, only.pos = TRUE)
+pbmc.markers %>%
+    group_by(cluster) %>%
+    dplyr::filter(avg_log2FC > 1)
+
+head(pbmc.markers)
+
+
+```
+```{r top marker, echo=TRUE}
+
+pbmc.markers <- pbmc.markers %>% group_by(cluster) %>% top_n(n = 10, wt = avg_log2FC)
+top10
+```
+# Анотація клітин
+
+```{r cells , echo=TRUE}
+
+
+ref <- celldex::HumanPrimaryCellAtlasData()
+
+pred <- SingleR(
+  test = pbmc[["RNA"]]$data,  
+  ref = ref,
+  labels = ref$label.main
+)
+
+pbmc$cell_type_hca <- pred$labels
+
+DimPlot(pbmc, group.by = "cell_type_hca", 
+        label = TRUE, 
+        repel = TRUE, 
+        label.size = 5) + 
+  NoLegend()
+
+```
+
+
+# Графічне зображення деяких
+
+```{r Graphic, echo=TRUE}
+
+VlnPlot(pbmc, features = c("GNLY", "CXCL3"))
+VlnPlot(pbmc, features = c("MZB1", "CCL3"))
+VlnPlot(pbmc, features = c("IL1B", "CPA3"))
+VlnPlot(pbmc, features = c("DERL3", "CXCL8"))
+VlnPlot(pbmc, features = c("CCL3L1","CCL4"))
+
+
+```
+```{r Graphic2, echo=TRUE}
+
+FeaturePlot(pbmc, features = c("GNLY",   "CXCL3",  "MZB1",   "CCL3",   "IL1B",   "CPA3",   "DERL3",  "CXCL8",  "CCL3L1", "CCL4"))
+
+
+```
+
+
+
+
+
+# графічне зображення аналізу PCA завдяки теплової карти
+
+```{r heat, echo=TRUE}
+
+pbmc.markers %>%
+  group_by(cluster) %>%
+  dplyr::filter(avg_log2FC > 1) %>%
+  slice_head(n = 10) %>%
+  ungroup() -> top10
+DoHeatmap(pbmc, features = top10$gene) + NoLegend()
+```
+# Відображення генів на кластерах
+
+
+```{r gene, echo=TRUE}
+
+new.cluster.ids <- c("GNLY",   "CXCL3",  "MZB1",   "CCL3",   "IL1B",   "CPA3",   "DERL3",  "CXCL8",  "CCL3L1", "CCL4","TRGC1
+")
+names(new.cluster.ids) <- levels(pbmc)
+pbmc <- RenameIdents(pbmc, new.cluster.ids)
+DimPlot(pbmc, reduction = "umap", label = TRUE, pt.size = 0.5) + NoLegend()
+```
+Gene Set Enrichment Analysis
+
+
+```{r funtion, echo=TRUE}
+
+ui <- fluidPage(
+  titlePanel("GO dotplot по кластерам"),
+  sidebarLayout(
+    sidebarPanel(
+      selectInput("cluster", "Оберіть кластер:", choices = names(plot_list))
+    ),
+    mainPanel(
+      plotOutput("goPlot", height = "600px")
+    )
+  )
+)
+
+server <- function(input, output) {
+  output$goPlot <- renderPlot({
+    plot_list[[input$cluster]]
+  })
+}
+
+shinyApp(ui = ui, server = server)
+```
+
+
+
+
+
+```{r another, echo=TRUE}
+fc_vector <- pbmc.markers$avg_log2FC
+
+cnetplot(go_res,
+         categorySize = "pvalue",
+         foldChange = fc_vector,
+         showCategory = 3)
+```
+``
+
+#Pathway enrichment analysis plots
+
+
+```{r GO enrichment, echo=TRUE}
+
+
+
+library(clusterProfiler)
+library(org.Hs.eg.db)
+library(enrichplot)
+
+go_results_list <- list()
+
+for (cl in clusters) {
+  genes <- filtered_markers %>%
+    filter(cluster == cl) %>%
+    pull(gene)
+  
+  entrez_genes <- bitr(genes, fromType = "SYMBOL", toType = "ENTREZID", OrgDb = org.Hs.eg.db)
+  
+  if (!is.null(entrez_genes) && nrow(entrez_genes) > 0) {
+    go_res <- enrichGO(
+      gene = entrez_genes$ENTREZID,
+      OrgDb = org.Hs.eg.db,
+      keyType = "ENTREZID",
+      ont = "BP",  # Biological Process
+      pAdjustMethod = "BH",
+      pvalueCutoff = 0.05,
+      qvalueCutoff = 0.2
+    )
+    
+    if (!is.null(go_res) && nrow(go_res) > 0) {
+      go_results_list[[as.character(cl)]] <- go_res
+      print(paste0("✅ GO enrichment successful – Cluster ", cl))
+    } else {
+      print(paste0("⚠️ GO enrichment returned no results – Cluster ", cl))
+    }
+  } else {
+    print(paste0("❌ Could not convert gene symbols for Cluster ", cl))
+  }
+}
+
+for (cl in names(go_results_list)) {
+  go_res <- go_results_list[[cl]]
+  if (!is.null(go_res) && nrow(go_res) > 0) {
+    print(
+      dotplot(go_res, showCategory = 10) + 
+      ggtitle(paste("GO dotplot – Cluster", cl))
+    )
+  }
+}
+
+
+for (cl in names(go_results_list)) {
+  go_res <- go_results_list[[cl]]
+  if (!is.null(go_res) && nrow(go_res) > 0) {
+    go_res_sim <- pairwise_termsim(go_res)
+    print(
+      emapplot(go_res_sim, showCategory = 10) + 
+      ggtitle(paste("GO emapplot – Cluster", cl))
+    )
+  }
+}
+
+```
