@@ -1,3 +1,7 @@
+library(clusterProfiler)
+library(enrichplot)
+library(org.Hs.eg.db)
+library(Rtsne)
 library(dplyr)
 library(Seurat)
 library(SeuratWrappers)
@@ -5,9 +9,10 @@ library(Azimuth)
 library(matrixStats)
 library(ggplot2)
 library(patchwork)
-options(future.globals.maxSize = 1e9)
 library(hdf5r)
 library(Matrix)
+library(clusterProfiler)
+library(topGO)
 setwd('D:/R_Genomix/S2/unser/data1/')
 
 seurat_object1 <- readRDS("10963_Fcol_5GEX.rds")
@@ -142,3 +147,97 @@ VlnPlot(seurat_object1mt5, features = "PDPN", pt.size = 0.1)
 
 seurat_object1mt5t <- RunTSNE(seurat_object1mt5, dims = 1:4)
 DimPlot(seurat_object1mt5t, reduction = "tsne", label = TRUE, pt.size = 1)
+
+##функціональний аналіз Gene Ontology 
+all_markers %>%
+  group_by(cluster) %>%
+  dplyr::filter(avg_log2FC > 1 & p_val_adj < 0.05) %>%
+  ungroup() -> top10a
+ego <- enrichGO(
+  gene          = top10a$gene, 
+  OrgDb         = org.Hs.eg.db,
+  keyType       = "SYMBOL",
+  ont           = "BP",
+  pAdjustMethod = "BH",
+  pvalueCutoff  = 0.05
+)
+#перевірка
+bitr(top10a$gene, fromType = "SYMBOL", toType = "ENTREZID", OrgDb = org.Hs.eg.db)
+ego_sim <- pairwise_termsim(ego)
+
+emapplot(
+  ego_sim,
+  showCategory = 10 # Кількість GO термінів для візуалізації
+)
+
+emapplot(
+  ego_sim,
+  showCategory = 20 # Кількість GO термінів для візуалізації
+)
+
+barplot(
+  ego_sim,
+  showCategory = 10
+) 
+
+barplot(
+  ego_sim,
+  showCategory = 20
+)
+
+plotGOgraph(ego)
+
+##KEGG Enrichment
+converted_genes <- bitr(
+  geneID = top10a$gene, 
+  fromType = "SYMBOL", 
+  toType = "ENTREZID", 
+  OrgDb = org.Hs.eg.db
+)
+# подивитися неконвертовані гени
+mapped_genes <- bitr(
+  geneID = top10a$gene, 
+  fromType = "SYMBOL", 
+  toType = "ENTREZID", 
+  OrgDb = org.Hs.eg.db
+)
+
+# Отримати неконвертовані гени
+unmapped_genes <- setdiff(top10a$gene, mapped_genes$SYMBOL)
+unmapped_genes
+
+top10a$gene <- toupper(top10a$gene) #  символи у верхній регістр
+top10a$gene <- trimws(top10a$gene) # видалити пробіли
+
+# викинути неконвертовані гени
+entrez_gene_list <- mapped_genes$ENTREZID
+
+kegg <- enrichKEGG(
+  gene          = entrez_gene_list, 
+  organism      = 'hsa', 
+  pvalueCutoff  = 0.05
+)
+
+
+kegg_results <- as.data.frame(kegg)
+
+# Перегляд результатів
+head(kegg_results)
+write.csv(kegg_results, file = "kegg_enrichment_results.csv", row.names = FALSE)
+significant_kegg <- kegg_results[kegg_results$p.adjust < 0.05, ]
+
+barplot(
+  kegg, 
+  showCategory = 3, # Топ 10 KEGG шляхів
+  title = "KEGG Pathways Enrichment"
+)
+
+dotplot(
+  kegg, 
+  showCategory = 10, # Топ 10 KEGG шляхів
+  title = "Dot Plot for KEGG Pathways"
+)
+cnetplot(
+  kegg, 
+  showCategory = 3 
+)
