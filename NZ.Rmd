@@ -1,0 +1,327 @@
+---
+title: "ZN_10963_Fcol_5GEX"
+author: "Zarina"
+date: "2025-04-21"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+
+```{r}
+library(clusterProfiler)
+library(enrichplot)
+library(org.Hs.eg.db)
+library(Rtsne)
+library(dplyr)
+library(Seurat)
+library(SeuratWrappers)
+library(Azimuth)
+library(matrixStats)
+library(ggplot2)
+library(patchwork)
+library(hdf5r)
+library(Matrix)
+library(clusterProfiler)
+library(topGO)
+``` 
+
+визначення папки для проекту, завантаження даних та підготовка їх
+Переклад шару "counts" до "data"
+```{r}
+setwd('D:/R_Genomix/S2/unser/data1/')
+
+seurat_object1 <- readRDS("10963_Fcol_5GEX.rds")
+seurat_object1 <- CreateSeuratObject(counts = seurat_object1)
+print(seurat_object1)
+
+DefaultAssay(seurat_object1) <- "RNA"
+seurat_object1 <- SetAssayData(seurat_object1, slot = "data", new.data = GetAssayData(seurat_object1, slot = "counts"))
+print(seurat_object1)
+
+```
+визначити мітохондріальні гени та відсіяти клітини, де частка мітохондріальних генів <= 5%
+
+```{r}
+seurat_object1[["percent.mt"]] <- PercentageFeatureSet(seurat_object1, pattern = "^MT-")
+
+VlnPlot(seurat_object1, features = c("nFeature_RNA", "nCount_RNA",'percent.mt'), ncol = 3)
+
+seurat_object1mt5 <- subset(seurat_object1, subset = percent.mt <= 5)
+print(seurat_object1mt5)
+
+```
+підготовка даних, нормалізація, пошук головних компонент, ліктьовий графік для визначення скільки компонент брати в аналіз надалі
+```{r}
+seurat_object1mt5 <- FindVariableFeatures(seurat_object1mt5)
+top10mt5 <- head(VariableFeatures(seurat_object1mt5), 10)
+print(top10mt5)
+
+plot1mt5 <- FeatureScatter(seurat_object1mt5, feature1 = "nCount_RNA", feature2 = "percent.mt")
+plot2mt5 <- FeatureScatter(seurat_object1mt5, feature1 = "nCount_RNA", feature2 = "nFeature_RNA")
+plot1mt5 + plot2mt5
+
+all.genes <- rownames(seurat_object1mt5)
+seurat_object1mt5 <- NormalizeData(seurat_object1mt5, normalization.method = "LogNormalize", scale.factor = 10000)
+seurat_object1mt5 <- ScaleData(seurat_object1mt5, features = all.genes)
+seurat_object1mt5 <- RunPCA(seurat_object1mt5, features = VariableFeatures(object = seurat_object1mt5))
+
+VizDimLoadings(seurat_object1mt5, dims = 1:2, reduction = "pca")
+
+ElbowPlot(seurat_object1mt5)
+
+```
+кластеризація, юмап, по 4 компонентам
+```{r}
+seurat_object1mt5 <- FindNeighbors(seurat_object1mt5, dims = 1:4)
+seurat_object1mt5 <- FindClusters(seurat_object1mt5, resolution = 0.5)
+seurat_object1mt5 <- RunUMAP(seurat_object1mt5, dims = 1:4)
+
+DimPlot(seurat_object1mt5, reduction = "umap")
+
+saveRDS(seurat_object1mt5, file = "seurat_object1mt5_cluster.rds")
+
+```
+
+
+маркери для кожного окремого кластеру, для ручної анотації
+```{r}
+cluster0.markers <- FindMarkers(seurat_object1mt5, ident.1 = 0)
+head(cluster0.markers, n = 5)
+
+cluster1.markers <- FindMarkers(seurat_object1mt5, ident.1 = 1)
+head(cluster1.markers, n = 5)
+
+cluster2.markers <- FindMarkers(seurat_object1mt5, ident.1 = 2)
+head(cluster2.markers, n = 5)
+
+cluster3.markers <- FindMarkers(seurat_object1mt5, ident.1 = 3)
+head(cluster3.markers, n = 5)
+
+cluster4.markers <- FindMarkers(seurat_object1mt5, ident.1 = 4)
+head(cluster4.markers, n = 5)
+
+cluster5.markers <- FindMarkers(seurat_object1mt5, ident.1 = 5)
+head(cluster5.markers, n = 5)
+
+cluster6.markers <- FindMarkers(seurat_object1mt5, ident.1 = 6)
+head(cluster6.markers, n = 5)
+
+cluster7.markers <- FindMarkers(seurat_object1mt5, ident.1 = 7)
+head(cluster7.markers, n = 5)
+
+cluster8.markers <- FindMarkers(seurat_object1mt5, ident.1 = 8)
+head(cluster8.markers, n = 5)
+
+cluster9.markers <- FindMarkers(seurat_object1mt5, ident.1 = 9)
+head(cluster9.markers, n = 5)
+
+
+### find all markers for all clusters
+all_markers <- FindAllMarkers(seurat_object1mt5)
+head(all_markers) 
+
+#DoHeatmap(seurat_object1mt5, features = top10mt5$gene) + NoLegend()
+
+all_markers %>%
+  group_by(cluster) %>%
+  dplyr::filter(avg_log2FC > 1) %>%
+  slice_head(n = 10) %>%
+  ungroup() -> top10
+DoHeatmap(seurat_object1mt5, features = top10$gene) 
+
+saveRDS(seurat_object1mt5, file = "seurat_object1mt5_cluster9.rds")
+
+```
+
+
+
+
+назви кластерів UMAP, відповідно до ручної анотації, відповідно до маркерів кожного кластеру
+
+```{r}
+seurat_object1mt5n <- RenameIdents(seurat_object1mt5,
+                              '0' = 'T cells', 
+                              '1' = 'T cells',
+                              '2' = 'B cells',
+                              '3' = 'Nerve and smooth muscle cells',
+                              '4' = 'Glandular epithelium',
+                              '5' = 'Endothelium',
+                              '6' = 'Prostate cancer stromal cells',
+                              '7' = 'Tumor-associated macrophages',
+                              '8' = 'Tumor-associated monocytes',
+                              '9' = 'Cancer-associated fibroblasts (CAFs)'
+                              )
+table(Idents(seurat_object1mt5n))
+DimPlot(seurat_object1mt5n, reduction = "umap")
+saveRDS(seurat_object1mt5n, file = "seurat_object1mt5_cluster_NameClusters.rds")
+
+```
+порівняння моїх результатів із публікацією:
+
+подивитися ген CD31 або ще названий PECAM1 (ендотеліальний маркер, але не у статті) у всіх кластерах
+замінити ген CD31 // PECAM1 на ген CD200 як кращий маркер ендотелію
+маркер на фібробласти PDPN Podoplanin
+```{r}
+
+FeaturePlot(seurat_object1mt5, features = "PECAM1")
+VlnPlot(seurat_object1mt5, features = "PECAM1", pt.size = 0.1)
+
+FeaturePlot(seurat_object1mt5, features = "CD200")
+VlnPlot(seurat_object1mt5, features = "CD200", pt.size = 0.1)
+
+FeaturePlot(seurat_object1mt5, features = "PDPN")
+VlnPlot(seurat_object1mt5, features = "PDPN", pt.size = 0.1)
+```
+ кластеризація t-SNE
+плот без анотації, лише по кластерам та плот із анотацією
+```{r pressure, echo=FALSE}
+seurat_object1mt5t <- RunTSNE(seurat_object1mt5, dims = 1:4)
+DimPlot(seurat_object1mt5t, reduction = "tsne", label = TRUE, pt.size = 1)
+
+seurat_object1mt5tn <- RunTSNE(seurat_object1mt5n, dims = 1:4)
+DimPlot(seurat_object1mt5tn, reduction = "tsne", label = TRUE, pt.size = 1)
+```
+дотплот для найбільш варіабельних генів та маркерів зі статті
+
+```{r pressure, echo=FALSE}
+DotPlot(
+  object = seurat_object1mt5n, 
+  features = c("PECAM1", "CD200", "KRT5", "KRT15", "MSMB", "KLK3", "LCN2", "CLDN4", "A2M", "PDPN"), # список генів
+  group.by = "seurat_clusters" # групування за типом клітин
+) + 
+  theme(axis.text.x = element_text(angle = 90, hjust = 1)) # поворот тексту на осі x для читабельності
+
+#найбільш варіабельні гени в цьому датасеті
+DotPlot(
+  object = seurat_object1mt5n, 
+  features = c("IGKV1-5", "IGLV1-47", "IGLV3-25", "IGLV2-23", "IGLV2-14", "IGKV1-16", "IGLV4-69", "IGKV3-20", "IGHV5-51", "IGHV3-11"), # список генів
+  group.by = "seurat_clusters" # групування за типом клітин
+) + 
+  theme(axis.text.x = element_text(angle = 90, hjust = 1)) 
+```
+
+підготовка до функціонального аналізу
+
+```{r pressure, echo=FALSE}
+
+  all_markers %>%
+  group_by(cluster) %>%
+  dplyr::filter(avg_log2FC > 1 & p_val_adj < 0.05) %>%
+  ungroup() -> top10a
+
+```
+
+
+функціональний аналіз Gene Ontology 
+
+```{r pressure, echo=FALSE}
+
+ego <- enrichGO(
+  gene          = top10a$gene, 
+  OrgDb         = org.Hs.eg.db,
+  keyType       = "SYMBOL",
+  ont           = "BP",
+  pAdjustMethod = "BH",
+  pvalueCutoff  = 0.05
+)
+#перевірка
+bitr(top10a$gene, fromType = "SYMBOL", toType = "ENTREZID", OrgDb = org.Hs.eg.db)
+ego_sim <- pairwise_termsim(ego)
+
+emapplot(
+  ego_sim,
+  showCategory = 10 # Кількість GO термінів для візуалізації
+)
+
+emapplot(
+  ego_sim,
+  showCategory = 20 # Кількість GO термінів для візуалізації
+)
+
+barplot(
+  ego_sim,
+  showCategory = 10
+) 
+
+barplot(
+  ego_sim,
+  showCategory = 20
+)
+
+plotGOgraph(ego)
+
+
+```
+
+
+KEGG Enrichment
+
+```{r pressure, echo=FALSE}
+
+  converted_genes <- bitr(
+  geneID = top10a$gene, 
+  fromType = "SYMBOL", 
+  toType = "ENTREZID", 
+  OrgDb = org.Hs.eg.db
+)
+
+
+# подивитися неконвертовані гени
+mapped_genes <- bitr(
+  geneID = top10a$gene, 
+  fromType = "SYMBOL", 
+  toType = "ENTREZID", 
+  OrgDb = org.Hs.eg.db
+)
+
+# Отримати неконвертовані гени
+unmapped_genes <- setdiff(top10a$gene, mapped_genes$SYMBOL)
+unmapped_genes
+
+top10a$gene <- toupper(top10a$gene) #  символи у верхній регістр
+top10a$gene <- trimws(top10a$gene) # видалити пробіли
+
+# викинути неконвертовані гени
+entrez_gene_list <- mapped_genes$ENTREZID
+
+kegg <- enrichKEGG(
+  gene          = entrez_gene_list, 
+  organism      = 'hsa', 
+  pvalueCutoff  = 0.05
+)
+
+
+kegg_results <- as.data.frame(kegg)
+
+# Перегляд результатів
+head(kegg_results)
+write.csv(kegg_results, file = "kegg_enrichment_results.csv", row.names = FALSE)
+significant_kegg <- kegg_results[kegg_results$p.adjust < 0.05, ]
+
+barplot(
+  kegg, 
+  showCategory = 3, # Топ 10 KEGG шляхів
+  title = "KEGG Pathways Enrichment"
+)
+
+dotplot(
+  kegg, 
+  showCategory = 10, # Топ 10 KEGG шляхів
+  title = "Dot Plot for KEGG Pathways"
+)
+cnetplot(
+  kegg, 
+  showCategory = 3 
+)
+
+```
+
+Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
