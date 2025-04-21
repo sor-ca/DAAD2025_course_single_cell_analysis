@@ -148,6 +148,68 @@ VlnPlot(seurat_object1mt5, features = "PDPN", pt.size = 0.1)
 seurat_object1mt5t <- RunTSNE(seurat_object1mt5, dims = 1:4)
 DimPlot(seurat_object1mt5t, reduction = "tsne", label = TRUE, pt.size = 1)
 
+##маркери на кожен із кластерів, по 2 із 5 визначених, для підтвердження ручної анотації
+# 0 1  IL7R  т лімфоцити
+FeaturePlot(seurat_object1mt5, features = "IL7R")
+VlnPlot(seurat_object1mt5, features = "IL7R", pt.size = 0.1)
+FeaturePlot(seurat_object1mt5, features = "CD3E")
+VlnPlot(seurat_object1mt5, features = "CD3E", pt.size = 0.1)
+
+# 2 MS4A1 (відомий як CD20) та CD79A в лімфоцити
+FeaturePlot(seurat_object1mt5, features = "MS4A1")
+VlnPlot(seurat_object1mt5, features = "MS4A1", pt.size = 0.1)
+FeaturePlot(seurat_object1mt5, features = "CD79A")
+VlnPlot(seurat_object1mt5, features = "CD79A", pt.size = 0.1)
+
+# 3 LGI4 NRXN1 гладка мускулатура
+FeaturePlot(seurat_object1mt5, features = "LGI4")
+VlnPlot(seurat_object1mt5, features = "LGI4", pt.size = 0.1)
+FeaturePlot(seurat_object1mt5, features = "NRXN1")
+VlnPlot(seurat_object1mt5, features = "NRXN1", pt.size = 0.1)
+
+# 4 залозистий епітелій 
+FeaturePlot(seurat_object1mt5, features = "KRT18")
+VlnPlot(seurat_object1mt5, features = "KRT18", pt.size = 0.1)
+FeaturePlot(seurat_object1mt5, features = "TACSTD2")
+VlnPlot(seurat_object1mt5, features = "TACSTD2", pt.size = 0.1)
+
+# 5 ендотелій
+FeaturePlot(seurat_object1mt5, features = "CALCRL")
+VlnPlot(seurat_object1mt5, features = "CALCRL", pt.size = 0.1)
+FeaturePlot(seurat_object1mt5, features = "ACKR1")
+VlnPlot(seurat_object1mt5, features = "ACKR1", pt.size = 0.1)
+
+# 6 строма  (чи окремий кластер, чи частина 4 ендотелій)
+FeaturePlot(seurat_object1mt5, features = "HOXB13")
+VlnPlot(seurat_object1mt5, features = "HOXB13", pt.size = 0.1)
+# нервові
+FeaturePlot(seurat_object1mt5, features = "PPP1R1B")
+VlnPlot(seurat_object1mt5, features = "PPP1R1B", pt.size = 0.1)
+# запальні стороми
+FeaturePlot(seurat_object1mt5, features = "PLA2G2A")
+VlnPlot(seurat_object1mt5, features = "PLA2G2A", pt.size = 0.1)
+# мязи
+FeaturePlot(seurat_object1mt5, features = "LRRC26")
+VlnPlot(seurat_object1mt5, features = "LRRC26", pt.size = 0.1)
+
+# 7 макрофаги
+FeaturePlot(seurat_object1mt5, features = "TYROBP")
+VlnPlot(seurat_object1mt5, features = "TYROBP", pt.size = 0.1)
+FeaturePlot(seurat_object1mt5, features = "AIF1")
+VlnPlot(seurat_object1mt5, features = "AIF1", pt.size = 0.1)
+
+# 8 моноцити
+FeaturePlot(seurat_object1mt5, features = "MS4A7")
+VlnPlot(seurat_object1mt5, features = "MS4A7", pt.size = 0.1)
+FeaturePlot(seurat_object1mt5, features = "FCGR2A")
+VlnPlot(seurat_object1mt5, features = "FCGR2A", pt.size = 0.1)
+
+# 9 фібробласти
+FeaturePlot(seurat_object1mt5, features = "DCN")
+VlnPlot(seurat_object1mt5, features = "DCN", pt.size = 0.1)
+FeaturePlot(seurat_object1mt5, features = "LUM")
+VlnPlot(seurat_object1mt5, features = "LUM", pt.size = 0.1)
+
 ##функціональний аналіз Gene Ontology 
 all_markers %>%
   group_by(cluster) %>%
