@@ -1,27 +1,20 @@
-#Датасет Марії:
-#https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE206426
-# GEO accession: Series GSE206426. Status 	Public on Jun 21, 2022
+# Датасет https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE206426
 # Title "A study on the radiosensitivity of radiation-induced lung injury at the acute phase based on single-cell transcriptomics"
+# GEO accession: Series GSE206426.
 # Organism 	Mus musculus
 
-setwd("D:/Courses/2025_Genomics_R/1_Project/Mariia")
-# getwd()
+setwd("D:/Courses/2025_Genomics_R/1_Project/GSE206426")
 
 library(Seurat)
 
-##################################################
 # Якщо файли, такі як barcodes.tsv, відсутні, можна виконати попередню обробку даних scRNA-seq, використовуючи альтернативні підходи:
-# Завантаження даних у форматі матриці: Якщо у вас є матриця каунтів, можна завантажити її безпосередньо в Seurat:
+# Завантаження даних у форматі матриці каунтів, можна завантажити її безпосередньо в Seurat:
 
 counts <- as.matrix(read.table("RILI_scRNAseq_UMIcount.txt", header = TRUE, row.names = 1))
+
 seurat_obj <- CreateSeuratObject(counts = counts, project = "scRNAseq")
 
-#str(data)
-#head(data)
-# Можна перевірити, як Seurat об'єкт виглядає за допомогою функції:
-head(seurat_obj)
-
-## Використовуйте функції для нормалізації та фільтрації даних, як у стандартному аналізі:
+## Функції для нормалізації та фільтрації даних, як у стандартному аналізі:
 seurat_obj <- NormalizeData(seurat_obj)
 
 seurat_obj <- FindVariableFeatures(seurat_obj, selection.method = "vst", nfeatures = 2000) # Ідентифікація змінних генів
@@ -54,6 +47,25 @@ head(cluster_markers[cluster_markers$cluster == 1, ])
 
 # Візуалізація маркерів
 FeaturePlot(seurat_obj, features = c("Fbln1", "Clec3b"))
+
+######################################
+#Встановлення пакета - scMCA (Single-cell Mouse Cell Atlas) для визначення типів клітин у даних scRNA-seq
+install.packages("devtools")
+install.packages("usethis")
+
+library(usethis)
+library(devtools)
+install.packages("shinythemes")
+install_github("ggjlab/scMCA")
+
+#Завантаження бібліотеки
+library(scMCA)
+
+###визначення типів клітин у даних scRNA-seq мишей за допомогою пакета scMCA після кластеризації з використанням Seurat:
+
+# Отримання матриці експресії генів
+expression_matrix <- as.matrix(seurat_obj@assays$RNA@data)
+#######error!!!!
 
 
 # Побудова теплової карти для маркерів
@@ -96,7 +108,6 @@ enrich_BP <- enrichGO(
   ont = "BP",
   pvalueCutoff = 0.05
 )
-
 dotplot(enrich)
 
 # Аналіз для молекулярних функцій MF - молекулярні функції
